@@ -1,11 +1,14 @@
 """
 创建数据库类：DataBase用于数据连接，并且以DataFrame的数据格式进行操作数据库
 """
-
+from functools import wraps
+import dbutils.pooled_db
+import sqlalchemy.engine
 import yaml
 import pymysql
 import pandas as pd
 from sqlalchemy import create_engine
+from sqlalchemy import MetaData, Table
 from dbutils.pooled_db import PooledDB
 
 
@@ -65,7 +68,6 @@ class DataBase(object):
 
         return db_engine
 
-
     def read_sql(self, sql):
         conn = self.connection()
         df = pd.read_sql(sql, con=conn)
@@ -75,7 +77,7 @@ class DataBase(object):
         return df
 
     # 单条数据插入/更新
-    def execute_sql(self,sql):
+    def execute_sql(self, sql):
         conn = self.connection()
         cur = conn.cursor()
         cur.execute(sql)
@@ -92,18 +94,75 @@ class DataBase(object):
         cur.close()
         conn.close()
 
-    def sava(self):
-        pass
+    def sava(self, df, table_name, add_id=False):
+        if add_id:
+            table_series = table_name[:-1] + 's'
+            sql = "select {}.Nextval from (select 1 from all_objects where rownum <= {})".format(table_series,
+                                                                                                 df.shape[0])
+            ids = self.read_sql(sql)
+            df["id"] = ids.iloc[:, 1].values
+        if isinstance(self.db_orm, sqlalchemy.engine.base.Engine):
+            meta = MetaData()
+            table_para = Table(table_name, meta, autoload=True, autoload_with=self.db_orm, schema=self.database)
+            df2dict = df.to_dict(orient='records')
+            conn = self.connection()
+            table_insert = str(table_para.insert())
+            conn.execute(table_insert, df2dict)
+        elif isinstance(self.db_orm, dbutils.pooled_db.PooledDB):
+            col_name = str(tuple(df.columns)).replace("'", "")
+            placeholder = '({})'.format(', '.join(['%s'*df.shape[1]]))
+            sql = f"insert into {table_name} {col_name} values {placeholder}"
+            self.execute_many_sql(sql=sql, data=df.values)
 
     def update(self):
         pass
 
+    def re_connect(class_method):
+        @wraps(class_method)
+        def warpped_function(self, *args, **kwargs):
+            try:
+                func_result = class_method(self, *args, **kwargs)
+                return func_result
+            except Exception as e:
+                print("重新连接数据库")
+                try:
+                    self.conn = self.connection()
+                    func_result = class_method(self, *args, **kwargs)
+                    return func_result
+                except Exception as e:
+                    print("数据库重新连接失败")
+
+        return warpped_function
+
+    @re_run
+    def run(self):
+        pass
+
+    def exception(self, error_type):
+        pass
+
+    def upload(self):
+        pass
+
+    def re_run(class_method):
+        @wraps(class_method)
+        def wrapped_function(self, kwargs):
+            try:
+                class_method(self, kwargs)
+            except NoDataError as e:
+                self.exception(kwargs.get("version_id"), "数据异常")
+            except Exception as e:
+                self.exception(kwargs.get("version_id"), "模型异常")
+            finally:
+                self.upload()
+
+        return wrapped_function()
+
+
+
 if __name__ == '__main__':
     # orm==dbutils/sqlalchemy/null 分别表示以数据连接池/数据引擎/普通连接方式
-    datadb = DataBase(orm="null")
+    datadb = DataBase(orm="sqlalchemy")
     sql = "select * from sys_config"
     df = datadb.read_sql(sql)
     print(df)
-
-
-

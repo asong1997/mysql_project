@@ -138,7 +138,6 @@ class DataBase(object):
 
         return warpped_function
 
-    @re_run
     def run(self):
         pass
 
@@ -167,6 +166,6 @@ class DataBase(object):
 if __name__ == '__main__':
     # orm==dbutils/sqlalchemy/null 分别表示以数据连接池/数据引擎/普通连接方式
     datadb = DataBase(orm="sqlalchemy")
-    sql = "select * from sys_config"
+    sql = "select * from air_quality_data limit 5"
     df = datadb.read_sql(sql)
     print(df)

@@ -9,5 +9,6 @@ user: 'root'
 password: '123456'
 host: '127.0.0.1'
 port: 3306
-database: 'sys'
+database: 'test'
+charset: 'utf8'
 

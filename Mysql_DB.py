@@ -12,6 +12,10 @@ from sqlalchemy import MetaData, Table
 from dbutils.pooled_db import PooledDB
 
 
+class NoDataError(Exception):
+    pass
+
+
 class DataBase(object):
 
     def __init__(self, orm="dbutils"):
